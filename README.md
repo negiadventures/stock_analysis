@@ -12,8 +12,8 @@
 ### 1. 📊 Heatmap & Table
 - Interactive heatmap visualizing stock performance across different exchanges.
 - Table view with sorting options based on:
-  - **% Symbol**
-  - **% Last Sale**
+  - **Symbol**
+  - **Last Sale**
   - **% Change**  
   - **Net Change**
   - **Market Cap**
