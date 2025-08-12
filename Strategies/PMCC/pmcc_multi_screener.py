@@ -18,7 +18,7 @@ Outputs CSV/Excel if requested.
 
 python pmcc_multi_screener.py \
   --tickers TSLA,AAPL,NVDA,AMD,META,TTD,NOW,LEU,SPOT,NFLX,OKLO,HOOD,COIN,MSTR \
-  --leaps-from 2027-12-01 --leaps-to 2027-12-31 \
+  --leaps-from 2027-01-01 --leaps-to 2027-12-31 \
   --shorts-from 2025-09-18 --shorts-to 2025-10-20 \
   --max-leaps-iv 2.0 \
   --early-close-buffer .30 \
@@ -82,11 +82,18 @@ def fetch_chain(ticker: str, fromdate: str, todate: str,
     }
     js = fetch_json(url, params=params)
     time.sleep(0.25)
-    rows = (js or {}).get("data", {}).get("table", {}).get("rows", []) or []
-    last_trade_raw = (js or {}).get("data", {}).get("lastTrade", "")
-    spot = None
-    m = re.search(r"\$([0-9]+\.[0-9]+)", last_trade_raw or "")
-    if m: spot = float(m.group(1))
+    rows = []
+    spot = 0
+    if js.get("data", {}).get("totalRecord") > 0:
+        rows = (js or {}).get("data", {}).get("table", {}).get("rows", []) or []
+        last_trade_raw = (js or {}).get("data", {}).get("lastTrade", "")
+        m = re.search(r"\$([0-9]+\.[0-9]+)", last_trade_raw or "")
+        if m:
+            spot = float(m.group(1))
+        else:
+            m = re.search(r"\$([0-9]+)", last_trade_raw or "")
+            if m:
+                spot = float(m.group(1))
 
     recs = []
     expiry = ""
