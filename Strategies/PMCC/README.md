@@ -57,6 +57,7 @@ Tip: For small/high‑vol names, set a higher --max-leaps-iv (e.g., 1.5–2.5). 
   - LEAPS: `--target-delta-low` / `--target-delta-high`
   - Shorts: `--short-delta-low` / `--short-delta-high`
 - `--top-n-leaps`, `--top-n-shorts` how many per‑ticker to keep before making combos
+- `--min-cushion-pct` determines % gap between your short strike and current price
 - `--sort` choose `metric2` (premium % of LEAPS price, recommended)
 - `--early-close-buffer` extra $ per share you expect to pay to close an ITM short near expiry (defaults to 0.30 = $30/contract). Use higher values for volatile/illiquid names.
 - `--excel` and/or `--csv` to save results
