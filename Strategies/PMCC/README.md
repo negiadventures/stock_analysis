@@ -109,6 +109,54 @@ Ranking
 
 ---
 
+
+# PMCC Trading Tips & Strategy Notes
+
+These notes provide practical guidance when using the PMCC (Poor Man's Covered Call) screener.
+
+## 1. Always Aim to Stay in Profit
+- Structure the position so that even if the short call expires **in-the-money**, you can roll it or close early for a net gain.
+- Avoid LEAPS with very low intrinsic value relative to their price — you want a solid "equity-like" position.
+- Choose short calls that bring enough premium to lower your cost basis quickly.
+
+## 2. Rolling the Short Call
+- **Rolling** = closing the existing short call and opening another one (later expiry, different strike) before expiry.
+- Rolling up and out can:
+  - Capture more premium
+  - Increase strike for more upside potential
+  - Avoid assignment risk if the short call goes deep ITM
+- Monitor theta decay and IV — roll when most of the premium is gone or when short delta gets too high (> 0.7).
+
+## 3. Using Greeks
+- **Delta**:
+  - LEAPS: Target 0.75–0.85 for equity-like behavior.
+  - Short call: 0.15–0.4 for decent premium without excessive ITM risk.
+- **Theta**:
+  - The short call should have positive theta for you (you benefit from time decay).
+- **IV (Implied Volatility)**:
+  - High IV = more premium but also more risk of sharp moves.
+  - Use IV Rank to time entries — higher IV makes short calls more attractive.
+
+## 4. Growth Stocks Considerations
+- PMCC works best on **growth or trending stocks** because:
+  - LEAPS gain from upward movement (delta exposure)
+  - Short calls bring in regular income
+- Avoid very low liquidity stocks — ensure both LEAPS and short calls have good open interest and tight bid/ask spreads.
+
+## 5. Position Sizing
+- Start small, scale in only if the trade behaves as expected.
+- Don't allocate more than a set % of your portfolio to a single ticker PMCC.
+
+## 6. Early Close Buffer
+- The `early_close_buffer` in the script accounts for closing ITM short calls slightly before expiry to avoid assignment.
+- This simulates paying a small amount ($0.30 default) extra per share when closing early.
+
+## 7. General Best Practices
+- Keep an eye on earnings dates — avoid holding short calls through earnings unless IV crush is the main play.
+- Roll or close positions before big events if you want to limit gap risk.
+- Review your positions weekly — adjust short legs if delta drifts too high.
+
+
 ## Disclaimer
 
 This tool is for research/education. Option strategies carry risk. Verify quotes/Greeks and confirm execution costs/slippage on your broker before trading.
