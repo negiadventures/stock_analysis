@@ -17,14 +17,15 @@ Outputs CSV/Excel if requested.
 
 
 python pmcc_multi_screener.py \
-  --tickers U,OKLO,HOOD \
+  --tickers TSLA,AAPL,NVDA,AMD,META,TTD,NOW,LEU,SPOT,NFLX,OKLO,HOOD,COIN,MSTR \
   --leaps-from 2027-12-01 --leaps-to 2027-12-31 \
   --shorts-from 2025-09-18 --shorts-to 2025-10-20 \
   --max-leaps-iv 2.0 \
   --early-close-buffer .30 \
-  --target-delta-low 0.7 --target-delta-high 0.85 \
-  --short-delta-low 0.3 --short-delta-high 0.6 \
-  --top-n-leaps 6 --top-n-shorts 8 \
+  --target-delta-low 0.75 --target-delta-high 0.85 \
+  --short-delta-low 0.25 --short-delta-high 0.50 \
+  --min-cushion-pct 2.5 \
+  --top-n-leaps 5 --top-n-shorts 5 \
   --sort metric2 \
   --excel pmcc_global_candidates.xlsx
 
@@ -80,7 +81,7 @@ def fetch_chain(ticker: str, fromdate: str, todate: str,
         "type": "all",
     }
     js = fetch_json(url, params=params)
-    time.sleep(0.5)
+    time.sleep(0.25)
     rows = (js or {}).get("data", {}).get("table", {}).get("rows", []) or []
     last_trade_raw = (js or {}).get("data", {}).get("lastTrade", "")
     spot = None
@@ -196,6 +197,7 @@ class PMCCSelectionConfig:
     target_leaps_delta_high: float = 0.85
     max_leaps_iv: float = 0.50        # relax for high-vol tickers like TSLA
     min_days_to_expiry: int = 365     # ~12 months
+    min_cushion_pct: float = 2.5
 
     # Short call filters
     short_min_days: int = 25
@@ -203,6 +205,7 @@ class PMCCSelectionConfig:
     short_delta_low: float = 0.25
     short_delta_high: float = 0.40
     early_close_buffer: float = 0.30
+
 
 def score_leaps_row(row, cfg: PMCCSelectionConfig) -> float:
     delta = float(row.get("delta") or 0.0)
@@ -247,8 +250,7 @@ def select_candidates_for_ticker(ticker: str,
 
     leaps_df  = add_greeks(ticker, leaps_df)
     shorts_df = add_greeks(ticker, shorts_df)
-    print(leaps_df)
-    print(shorts_df)
+
     if not leaps_df.empty:
         leaps_df = leaps_df[
             leaps_df["delta"].astype(float).between(cfg.target_leaps_delta_low, cfg.target_leaps_delta_high, inclusive="both")
@@ -264,7 +266,6 @@ def select_candidates_for_ticker(ticker: str,
         ].copy()
         if not shorts_df.empty:
             shorts_df = shorts_df.sort_values(by=["mid","iv","delta"], ascending=[False, False, True]).head(top_n_shorts)
-
     # tag ticker
     if not leaps_df.empty:
         leaps_df["ticker"]  = ticker
@@ -272,6 +273,8 @@ def select_candidates_for_ticker(ticker: str,
     if not shorts_df.empty:
         shorts_df["ticker"] = ticker
         shorts_df["spot"] = spot
+    print(leaps_df)
+    print(shorts_df)
     return leaps_df.reset_index(drop=True), shorts_df.reset_index(drop=True), spot
 
 # ---------------------------
@@ -281,7 +284,8 @@ def build_combos(
     all_leaps: List[pd.DataFrame],
     all_shorts: List[pd.DataFrame],
     sort_key: str = "metric2",
-    early_close_buffer: float = 0.30  # $ per contract you assume to close ITM short near expiry
+    early_close_buffer: float = 0.30,  # $ per contract you assume to close ITM short near expiry
+    min_cushion_pct : float = 2.5
 ) -> pd.DataFrame:
     """
     Combine per-ticker LEAPS with same-ticker SHORTS only (PMCC).
@@ -341,38 +345,38 @@ def build_combos(
 
                 # ROI on net debit for that scenario
                 roi_itm_close_pct = (itm_close_pl_per_spread / (net_debit * 100.0)) * 100.0 if net_debit > 0 else float("nan")
+                if cushion_pct > min_cushion_pct:
+                    rows.append({
+                        "ticker": ticker,
+                        "spot": spot,
 
-                rows.append({
-                    "ticker": ticker,
-                    "spot": spot,
+                        # LEAPS leg
+                        "leap_expiry": leap_exp,
+                        "leap_strike": leap_strk,
+                        "leap_mid": leap_mid,
+                        "leap_delta": leap_delta,
+                        "leap_iv": leap_iv,
+                        "leap_intrinsic_now": leap_intrinsic,
+                        "leap_intrinsic_pct_of_price": intrinsic_pct_of_price,
 
-                    # LEAPS leg
-                    "leap_expiry": leap_exp,
-                    "leap_strike": leap_strk,
-                    "leap_mid": leap_mid,
-                    "leap_delta": leap_delta,
-                    "leap_iv": leap_iv,
-                    "leap_intrinsic_now": leap_intrinsic,
-                    "leap_intrinsic_pct_of_price": intrinsic_pct_of_price,
+                        # Short leg
+                        "short_expiry": short_exp,
+                        "short_strike": short_strk,
+                        "short_mid": short_mid,
+                        "short_delta": short_delta,
+                        "short_iv": short_iv,
 
-                    # Short leg
-                    "short_expiry": short_exp,
-                    "short_strike": short_strk,
-                    "short_mid": short_mid,
-                    "short_delta": short_delta,
-                    "short_iv": short_iv,
+                        # Safety / structure
+                        "cushion_to_short_strike_pct": cushion_pct,  # distance from spot to short strike
 
-                    # Safety / structure
-                    "cushion_to_short_strike_pct": cushion_pct,  # distance from spot to short strike
+                        # P&L approximations
+                        "net_debit_per_spread": net_debit,           # in option points; $ *100 per contract
+                        "itm_close_pl_per_spread_$": itm_close_pl_per_spread,
+                        "itm_close_roi_pct_on_net": roi_itm_close_pct,
 
-                    # P&L approximations
-                    "net_debit_per_spread": net_debit,           # in option points; $ *100 per contract
-                    "itm_close_pl_per_spread_$": itm_close_pl_per_spread,
-                    "itm_close_roi_pct_on_net": roi_itm_close_pct,
-
-                    # Ranking metric
-                    "metric2_premium_over_leap_price_pct": metric2,
-                })
+                        # Ranking metric
+                        "metric2_premium_over_leap_price_pct": metric2,
+                    })
 
     combos = pd.DataFrame(rows)
     if combos.empty:
@@ -412,6 +416,7 @@ def main():
     ap.add_argument("--target-delta-high", type=float, default=0.85)
     ap.add_argument("--short-delta-low",   type=float, default=0.25)
     ap.add_argument("--short-delta-high",  type=float, default=0.40)
+    ap.add_argument("--min-cushion-pct", type = float, default=2.5)
 
     ap.add_argument("--top-n-leaps",  type=int, default=8)
     ap.add_argument("--top-n-shorts", type=int, default=10)
@@ -428,7 +433,8 @@ def main():
         max_leaps_iv=args.max_leaps_iv,
         short_delta_low=args.short_delta_low,
         short_delta_high=args.short_delta_high,
-        early_close_buffer= args.early_close_buffer
+        early_close_buffer= args.early_close_buffer,
+        min_cushion_pct = args.min_cushion_pct
     )
 
     tickers = [t.strip().upper() for t in args.tickers.split(",") if t.strip()]
@@ -456,7 +462,7 @@ def main():
         all_leaps.append(leaps_df)
         all_shorts.append(shorts_df)
 
-    combos = build_combos(all_leaps, all_shorts, sort_key=args.sort, early_close_buffer=cfg.early_close_buffer)
+    combos = build_combos(all_leaps, all_shorts, sort_key=args.sort, early_close_buffer=cfg.early_close_buffer, min_cushion_pct = cfg.min_cushion_pct)
     if combos.empty:
         print("\nNo combos found. Consider widening date windows or relaxing filters.")
         return
