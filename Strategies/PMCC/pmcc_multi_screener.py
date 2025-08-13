@@ -17,7 +17,7 @@ Outputs CSV/Excel if requested.
 
 
 python pmcc_multi_screener.py \
-  --tickers TSLA,AAPL,NVDA,AMD,META,TTD,NOW,LEU,SPOT,NFLX,OKLO,HOOD,COIN,MSTR \
+  --tickers TSLA,QQQ \
   --leaps-from 2027-01-01 --leaps-to 2027-12-31 \
   --shorts-from 2025-09-18 --shorts-to 2025-10-20 \
   --max-leaps-iv 2.0 \
@@ -29,6 +29,8 @@ python pmcc_multi_screener.py \
   --sort metric2 \
   --excel pmcc_global_candidates.xlsx
 
+for stocks, assetclass=stocks in url
+for ETFs, assetclass=etf in url
 """
 
 import re
@@ -42,6 +44,7 @@ from typing import Optional, Dict, Tuple, List
 import requests
 import pandas as pd
 
+assetclass = "stocks"
 NASDAQ_BASE = "https://api.nasdaq.com"
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
@@ -51,7 +54,6 @@ HEADERS = {
     "Origin": "https://www.nasdaq.com",
     "Referer": "https://www.nasdaq.com/",
 }
-
 # ---------------------------
 # Helpers
 # ---------------------------
@@ -69,9 +71,10 @@ def fetch_json(url: str, params: dict=None) -> dict:
 
 def fetch_chain(ticker: str, fromdate: str, todate: str,
                 callput: str="call", money: str="all", limit: int=500) -> Tuple[pd.DataFrame, Optional[float]]:
+    global assetclass
     url = f"{NASDAQ_BASE}/api/quote/{ticker}/option-chain"
     params = {
-        "assetclass": "stocks",
+        "assetclass": assetclass,
         "limit": str(limit),
         "fromdate": fromdate,
         "todate": todate,
@@ -81,7 +84,11 @@ def fetch_chain(ticker: str, fromdate: str, todate: str,
         "type": "all",
     }
     js = fetch_json(url, params=params)
-    time.sleep(0.25)
+    if js.get("data", {}) is None:
+        assetclass = "etf"
+        params["assetclass"] = assetclass
+        js = fetch_json(url, params=params)
+    time.sleep(0.5)
     rows = []
     spot = 0
     if js.get("data", {}).get("totalRecord") > 0:
@@ -117,7 +124,8 @@ def fetch_chain(ticker: str, fromdate: str, todate: str,
     return df, spot
 
 def fetch_greeks(ticker, detail_path: str) -> Dict[str, Optional[float]]:
-    url = f"{NASDAQ_BASE}{detail_path}".replace(f"https://api.nasdaq.com/market-activity/stocks/{ticker.lower()}/option-chain/call-put-options/", f"https://api.nasdaq.com/api/quote/{ticker.lower()}/option-chain?assetclass=stocks&recordID=")
+    global assetclass
+    url = f"{NASDAQ_BASE}{detail_path}".replace(f"https://api.nasdaq.com/market-activity/{assetclass}/{ticker.lower()}/option-chain/call-put-options/", f"https://api.nasdaq.com/api/quote/{ticker.lower()}/option-chain?assetclass={assetclass}&recordID=")
     js = fetch_json(url)
     time.sleep(1)
     data = (js or {}).get("data", {})
